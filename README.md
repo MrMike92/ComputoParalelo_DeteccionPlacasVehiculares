@@ -15,6 +15,8 @@ pip install numpy
 ```
 
 ## Funcionamiento.
+Por el momento solo funciona los siguentes códigos que se encuentran en la carpeta "procesar_imagenes"
+
 <br> 1. Descargar la base de datos, descomprimir el archivo ZIP y quedarse solo con la carpeta "images".
 
 > [!IMPORTANT]

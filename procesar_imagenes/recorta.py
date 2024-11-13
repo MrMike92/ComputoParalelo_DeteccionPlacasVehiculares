@@ -85,5 +85,5 @@ def parallel_processing(folder_path, output_folder, num_threads):
 
 folder_path = 'imgs'
 output_folder = 'cropped_imgs'
-num_threads = 20
+num_threads = 5
 parallel_processing(folder_path, output_folder, num_threads)
