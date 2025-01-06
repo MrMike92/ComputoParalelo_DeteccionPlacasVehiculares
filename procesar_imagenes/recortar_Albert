@@ -1,0 +1,68 @@
+import os
+import cv2
+from concurrent.futures import ThreadPoolExecutor #Importar ThreadPoolExecutor para procesamiento en paralelo 
+from math import ceil
+
+cv2.setNumThreads(1)#ASeguras que cv2 no use más de un hilo
+
+def detect_and_crop_plate(image_path, output_folder): #Función para detectar y recortar la placa
+    # Cargar imagen
+    image = cv2.imread(image_path)
+    if image is None: #Si no se puede cargar la imagen
+        print(f"Error al cargar la imagen: {image_path}")
+        return False
+    
+    # Preprocesamiento
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) #Convertir a escala de grises
+    _, thresh = cv2.threshold(gray, 75, 255, cv2.THRESH_BINARY_INV) #Aplicar umbralización binaria inversa
+    
+    # Encontrar contornos en la imagen umbralizada para identificar la placa 
+    contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE) 
+    plate = None #Inicializar la variable de la placa
+    
+    # Iterar sobre los contornos para identificar la placa
+    for contour in contours: 
+        x, y, w, h = cv2.boundingRect(contour) #Obtener las coordenadas y dimensiones del contorno 
+        aspect_ratio = w / float(h) #Calcular la relación de aspecto del contorno
+        #Calcular el área del contorno
+        area = cv2.contourArea(contour) #Calcular el área del contorno   
+        
+        # Verificación de proporciones y área para identificar la placa
+        if 2 < aspect_ratio < 10 and 10000 < area < 90000:#
+            # Recortar la región de la placa
+            plate = image[y:y + h, x:x + w]
+            save_path = os.path.join(output_folder, os.path.basename(image_path)) #Guardar la imagen recortada
+            cv2.imwrite(save_path, plate)#Guardar la imagen recortada en la carpeta de salida
+            return True  # Indica que la placa fue encontrada y guardada
+    return False  # No se encontró ninguna placa que cumpliera con los criterios
+
+
+# -- Parallel processing function --
+def parallel_processing(folder_path, output_folder, num_threads):
+    # Crear la carpeta de salida si no existe
+    os.makedirs(output_folder, exist_ok=True) #Error handling
+    
+    #Listar las imágenes en la carpeta
+    image_paths = [os.path.join(folder_path, fname) for fname in os.listdir(folder_path) if fname.endswith('.JPG')]
+    
+    # Procesar las imágenes en paralelo
+    with ThreadPoolExecutor(max_workers=num_threads) as executor: #Usar un ThreadPoolExecutor para procesar las imágenes en paralelo con el número de hilos especificado 
+        # Usar una lista de futuros para cada imagen procesada en paralelo
+        futures = [executor.submit(detect_and_crop_plate, image_path, output_folder) for image_path in image_paths] #Procesar cada imagen en paralelo y guardar el resultado en una lista de futuros
+        
+        # Recolectar los resultados de cada tarea
+        for future in futures: #Iterar sobre los futuros para obtener los resultados de cada tarea en paralelo
+            try:
+                result = future.result() #Obtener el resultado de la tarea
+                if not result: #Si no se encontró una placa en la imagen
+                    print("No se encontró una placa en una de las imágenes.")
+            except Exception as e: #Manejo de excepciones
+                print(f"Error al procesar una imagen: {e}")
+
+
+# Parámetros de entrada
+folder_path = 'Artificial Mercosur License Plates/images' # Carpeta con las imágenes originales
+output_folder = 'cropped_trial_images'# Carpeta de salida para las imágenes recortadas
+num_threads = 6 #Threads to be used
+
+parallel_processing(folder_path, output_folder, num_threads)
