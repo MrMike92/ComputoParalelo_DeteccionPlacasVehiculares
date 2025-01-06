@@ -1,68 +1,85 @@
 import os
 import cv2
-from concurrent.futures import ThreadPoolExecutor #Importar ThreadPoolExecutor para procesamiento en paralelo 
-from math import ceil
+from concurrent.futures import ThreadPoolExecutor
 
-cv2.setNumThreads(1)#ASeguras que cv2 no use más de un hilo
+cv2.setNumThreads(1)  # Asegura que cv2 no use más de un hilo
 
-def detect_and_crop_plate(image_path, output_folder): #Función para detectar y recortar la placa
-    # Cargar imagen
-    image = cv2.imread(image_path)
-    if image is None: #Si no se puede cargar la imagen
-        print(f"Error al cargar la imagen: {image_path}")
-        return False
-    
-    # Preprocesamiento
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) #Convertir a escala de grises
-    _, thresh = cv2.threshold(gray, 75, 255, cv2.THRESH_BINARY_INV) #Aplicar umbralización binaria inversa
-    
-    # Encontrar contornos en la imagen umbralizada para identificar la placa 
-    contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE) 
-    plate = None #Inicializar la variable de la placa
-    
-    # Iterar sobre los contornos para identificar la placa
-    for contour in contours: 
-        x, y, w, h = cv2.boundingRect(contour) #Obtener las coordenadas y dimensiones del contorno 
-        aspect_ratio = w / float(h) #Calcular la relación de aspecto del contorno
-        #Calcular el área del contorno
-        area = cv2.contourArea(contour) #Calcular el área del contorno   
-        
-        # Verificación de proporciones y área para identificar la placa
-        if 2 < aspect_ratio < 10 and 10000 < area < 90000:#
-            # Recortar la región de la placa
-            plate = image[y:y + h, x:x + w]
-            save_path = os.path.join(output_folder, os.path.basename(image_path)) #Guardar la imagen recortada
-            cv2.imwrite(save_path, plate)#Guardar la imagen recortada en la carpeta de salida
-            return True  # Indica que la placa fue encontrada y guardada
-    return False  # No se encontró ninguna placa que cumpliera con los criterios
+# Función para cargar el clasificador de placas
+def load_plate_cascade(cascade_path):
+    plate_cascade = cv2.CascadeClassifier(cascade_path)
+    if plate_cascade.empty():
+        raise Exception("Error al cargar el clasificador en cascada")
+    return plate_cascade
 
+# Función para detectar y recortar la placa utilizando el clasificador en cascada
+def detect_plate_using_cascade(image, plate_cascade):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    plates = plate_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+    return plates
 
-# -- Parallel processing function --
-def parallel_processing(folder_path, output_folder, num_threads):
+# Función para procesar y guardar la imagen recortada de la placa
+def save_plate(image, plates, output_folder, image_name):
+    for (x, y, w, h) in plates:
+        plate = image[y:y+h, x:x+w]  # Recortar la placa
+        save_path = os.path.join(output_folder, f"{image_name}_plate.jpg")  # Nombre del archivo recortado
+        cv2.imwrite(save_path, plate)  # Guardar la placa
+        print(f"Placa guardada en {save_path}")
+        return True  # Placa recortada correctamente
+    return False  # No se encontró una placa
+
+# Función para cargar imágenes desde una carpeta
+def load_images_from_folder(folder_path):
+    image_paths = [os.path.join(folder_path, fname) for fname in os.listdir(folder_path) if fname.lower().endswith(('.jpg', '.jpeg', '.png'))]
+    return image_paths
+
+# Función principal para procesar las imágenes en paralelo
+def process_images_parallel(folder_path, output_folder, num_threads, plate_cascade):
     # Crear la carpeta de salida si no existe
-    os.makedirs(output_folder, exist_ok=True) #Error handling
-    
-    #Listar las imágenes en la carpeta
-    image_paths = [os.path.join(folder_path, fname) for fname in os.listdir(folder_path) if fname.endswith('.JPG')]
-    
-    # Procesar las imágenes en paralelo
-    with ThreadPoolExecutor(max_workers=num_threads) as executor: #Usar un ThreadPoolExecutor para procesar las imágenes en paralelo con el número de hilos especificado 
-        # Usar una lista de futuros para cada imagen procesada en paralelo
-        futures = [executor.submit(detect_and_crop_plate, image_path, output_folder) for image_path in image_paths] #Procesar cada imagen en paralelo y guardar el resultado en una lista de futuros
+    os.makedirs(output_folder, exist_ok=True)
+
+    image_paths = load_images_from_folder(folder_path)
+
+    # Procesar las imágenes en paralelo usando ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        futures = [executor.submit(process_single_image, image_path, output_folder, plate_cascade) for image_path in image_paths]
         
         # Recolectar los resultados de cada tarea
-        for future in futures: #Iterar sobre los futuros para obtener los resultados de cada tarea en paralelo
+        for future in futures:
             try:
-                result = future.result() #Obtener el resultado de la tarea
-                if not result: #Si no se encontró una placa en la imagen
+                result = future.result()
+                if not result:
                     print("No se encontró una placa en una de las imágenes.")
-            except Exception as e: #Manejo de excepciones
+            except Exception as e:
                 print(f"Error al procesar una imagen: {e}")
 
+# Función para procesar una imagen individual
+def process_single_image(image_path, output_folder, plate_cascade):
+    # Cargar la imagen
+    image = cv2.imread(image_path)
+    if image is None:
+        print(f"Error al cargar la imagen: {image_path}")
+        return False
+
+    # Obtener el nombre de la imagen sin extensión
+    image_name = os.path.splitext(os.path.basename(image_path))[0]
+
+    # Detectar placas usando el clasificador en cascada
+    plates = detect_plate_using_cascade(image, plate_cascade)
+
+    # Si se detecta alguna placa, recórtala y guárdala
+    if plates != ():
+        return save_plate(image, plates, output_folder, image_name)
+    
+    return False
 
 # Parámetros de entrada
-folder_path = 'Artificial Mercosur License Plates/images' # Carpeta con las imágenes originales
-output_folder = 'cropped_trial_images'# Carpeta de salida para las imágenes recortadas
-num_threads = 6 #Threads to be used
+folder_path = 'Artificial Mercosur License Plates/images'  # Carpeta con las imágenes originales
+output_folder = 'cropped_plates_images'  # Carpeta de salida para las imágenes recortadas
+num_threads = 8  # Número de threads a utilizar
 
-parallel_processing(folder_path, output_folder, num_threads)
+# Cargar el clasificador en cascada (asegúrate de tener el archivo XML del clasificador)
+cascade_path = 'haarcascade_russian_plate_number.xml'  # Ruta al archivo del clasificador Haar
+plate_cascade = load_plate_cascade(cascade_path)
+
+# Procesar las imágenes en paralelo
+process_images_parallel(folder_path, output_folder, num_threads, plate_cascade)
