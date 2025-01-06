@@ -4,14 +4,14 @@ Un detector de placas vehiculares la cual usa paralelismo para la reducción de 
 # Índice
 
 * [Instrucciones de uso](#Instrucciones-de-uso)
-* [Herramientas utilizadas](#Tegnologías-Utilizadas)
+* [Herramientas utilizadas](#Herramientas-Utilizadas)
     * [Tesseract OCR](#Tesseract-OCR)
     * [YOLO11](#YOLO11)
     * [RoboFlow](#RoboFlow)
     * [OpenCV](#OpenCV)
 * [Funcionamiento](#Funcionamiento)
-    * [Procesamiento de imagenes](#Procesamiento-de-imagenes)
-    * [Procesamiento de video](#Procesamiento de video)
+    * [Procesamiento de imágenes](#Procesamiento-de-imágenes)
+    * [Procesamiento de vídeo](#Procesamiento-de-vídeo)
 * [Nota](#Nota)
 
 # Instrucciones de uso
@@ -74,13 +74,13 @@ pip install opencv-python
 > Si previamente instalo las bibliotecas de la sección [Instrucciones de uso](#Instrucciones-de-uso), no es necesario volver a instalarlo.
 
 # Funcionamiento
-## Procesamiento de imagenes
+## Procesamiento de imágenes
 
 <br> 1. Descargar la base de datos, descomprimir el archivo ZIP y quedarse solo con la carpeta **images**.
 
 > [!IMPORTANT]
 > La base de datos de imangenes utilizada para este proyecto pertenece a su resprectivo creador.
-> <br><br>Link de la base de datos de las imagenes: https://data.mendeley.com/datasets/nx9xbs4rgx/2
+> <br><br>Link de la base de datos de las imágenes: https://data.mendeley.com/datasets/nx9xbs4rgx/2
 
 <br> 2. Ejecutar ***change_names.py***.
 
@@ -92,10 +92,10 @@ pip install opencv-python
 > [!IMPORTANT]
 > Cambiar el valor de *num_threads* a un valor que este dentro del rango de la cantidad de procesadores lógicos de tu procesador
 
-## Procesamiento de video
+## Procesamiento de vídeo
 > [!IMPORTANT]
 > Los videos utilizados para este proyecto pertenecen a sus resprectivos creadores.
-> <br><br>Link del video *test* y *test2*: https://www.youtube.com/watch?v=QmwIjn6rwQA
+> <br><br>Link del vídeo *test* y *test2*: https://www.youtube.com/watch?v=QmwIjn6rwQA
 
 <br> 1. Descargar el repositorio o solo el contenido de la carpeta **procesar_videos**.
 
