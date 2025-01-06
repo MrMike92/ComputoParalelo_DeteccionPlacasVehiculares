@@ -1,0 +1,106 @@
+import cv2
+import pytesseract
+import numpy as np
+import supervision as sv
+from ultralytics import YOLO
+
+# Recortar imágenes
+def cropped(detections, image):
+    """Recorta la imagen en base a las coordenadas de detección."""
+    bounding_box = detections.xyxy[0]  # Extraer las coordenadas de la caja delimitadora
+    xmin, ymin, xmax, ymax = map(int, bounding_box)  # Convertir a enteros
+    return image[ymin:ymax, xmin:xmax]  # Recortar la imagen
+
+# Anotar la imagen con los resultados
+def annotate_image(frame, detections):
+    """Anotar la imagen con las detecciones de vehículos o matrículas."""
+    bounding_box_annotator = sv.BoundingBoxAnnotator()
+    label_annotator = sv.LabelAnnotator()
+    frame = bounding_box_annotator.annotate(scene=frame, detections=detections)
+    return label_annotator.annotate(scene=frame, detections=detections)
+
+# Obtener el texto de la matrícula usando OCR
+def extract_plate_text(image):
+    """Extrae el texto de la matrícula utilizando Tesseract OCR."""
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)  # Convertir a escala de grises
+    pytesseract.pytesseract.tesseract_cmd = r'C:/Program Files/Tesseract-OCR/tesseract.exe'
+    # OCR configurado para leer matrículas
+    data = pytesseract.image_to_string(gray, lang='eng', config='--psm 10 --oem 3 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz')
+    # Limpiar el texto OCR extraído
+    valor_medio = len(data) // 2
+    return data[valor_medio - 3:valor_medio + 4]
+
+def main():
+    # Abrir video
+    cap = cv2.VideoCapture('videos/test3.mp4')  # Cambiar por la ubicación del archivo
+    if not cap.isOpened():
+        print("Error: No se puede abrir el archivo de video")
+        exit()
+
+    # Inicializar la grabación del video de salida
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    print(fps, "FPS")
+    out = cv2.VideoWriter('videos/output_video_test3_preentrenadoV2.mp4', cv2.VideoWriter_fourcc(*'mp4v'), fps, (frame_width, frame_height))
+
+    # Cargar modelos una sola vez
+    model_V = YOLO('models\\yolo11n.pt')  # Modelo de vehículos
+    model_LP = YOLO('models\\placa.pt')  # Modelo de matrículas
+
+    frame_number = 0
+    class_id = [2, 3, 5, 7]  # Etiquetas para vehículo: car, motorcycle, bus, truck
+
+    while cap.isOpened():
+        ret, frame = cap.read()  # Leer frame a frame
+        frame_number += 1
+        if not ret:
+            break
+
+        print(f"Frame número: {frame_number}")
+
+        # Detectar vehículos
+        results_V = model_V(frame)[0]
+        detection_V = sv.Detections.from_ultralytics(results_V)
+        
+        # Filtrar detecciones de vehículos
+        for det in detection_V.class_id:
+            if det in class_id:
+                annotated_image_V = annotate_image(frame, detection_V)
+                cropped_image_V = cropped(detection_V, frame)
+
+                # Detectar matrícula
+                results_LP = model_LP(cropped_image_V, agnostic_nms=True)[0]
+                detections_LP = sv.Detections.from_ultralytics(results_LP)
+                cropped_image_LP = cropped(detections_LP, cropped_image_V)
+
+                # Obtener coordenadas de la matrícula con respecto al vehículo
+                dif_x = results_LP.boxes.xyxy[0][2] - results_LP.boxes.xyxy[0][0]
+                dif_y = results_LP.boxes.xyxy[0][3] - results_LP.boxes.xyxy[0][1]
+
+                x1_nuevo = detection_V.xyxy[0][0] + detections_LP.xyxy[0][0]
+                y1_nuevo = detection_V.xyxy[0][1] + detections_LP.xyxy[0][1]
+                x2_nuevo = x1_nuevo + dif_x
+                y2_nuevo = y1_nuevo + dif_y
+
+                detections_LP.xyxy = np.array([[x1_nuevo, y1_nuevo, x2_nuevo, y2_nuevo]])
+                annotated_image_LP = annotate_image(annotated_image_V, detections_LP)
+
+                # Extraer texto de la matrícula usando OCR
+                plate_text = extract_plate_text(cropped_image_LP)
+
+                # Agregar texto de la matrícula a la imagen
+                position = (900, 60)
+                frame_with_text = cv2.putText(annotated_image_LP, plate_text, position, cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 6)
+
+                print(plate_text)
+                out.write(frame_with_text)  # Guardar el frame para el video de salida
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    out.release()
+
+if __name__ == "__main__":
+    main()
